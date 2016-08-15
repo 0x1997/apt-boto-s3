@@ -1,22 +1,21 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import boto3
 import botocore
 import collections
 import hashlib
-import Queue
+import queue
 import re
 import signal
 import sys
 import threading
-import urllib
-import urlparse
+import urllib.request, urllib.parse, urllib.error
 
-class Interrupt():
+class Interrupt:
     def __init__(self):
         self.lock = threading.Lock()
         self.interrupted = False
 
-    def __nonzero__(self):
+    def __bool__(self):
         return self.interrupted
 
     def interupt(self):
@@ -64,7 +63,7 @@ class Message(collections.namedtuple('Message_', ['header', 'fields'])):
 
 Pipes = collections.namedtuple('Pipes', ['input', 'output'])
 
-class AptIO(object):
+class AptIO:
     @staticmethod
     def input(input):
         def read_one():
@@ -87,7 +86,7 @@ class AptIO(object):
             output.flush()
         return send_one
 
-class AptMethod(object):
+class AptMethod:
     def __init__(self, pipes):
         self.input = AptIO.input(pipes.input)
         self.output = AptIO.output(pipes.output)
@@ -103,10 +102,10 @@ class AptRequest(collections.namedtuple('AptRequest_', ['output'])):
 
 class PipelinedAptMethod(AptMethod):
 
-    class Output(object):
+    class Output:
         def __init__(self, method):
             self.method = method
-            self.queue = Queue.Queue()
+            self.queue = queue.Queue()
             self.method.queues.put(self.queue)
 
         def __enter__(self):
@@ -125,7 +124,7 @@ class PipelinedAptMethod(AptMethod):
         super(PipelinedAptMethod, self).__init__(pipes)
         self.interrupt = Interrupt()
         self.method_type = method_type
-        self.queues = Queue.Queue()
+        self.queues = queue.Queue()
 
     def _send_queue_thread(self):
         def f():
@@ -160,7 +159,7 @@ class PipelinedAptMethod(AptMethod):
         for thread in threads:
             thread.join()
 
-class S3AptMethodType(object):
+class S3AptMethodType:
     def request(self, output):
         return S3AptRequest(output)
 
@@ -172,14 +171,15 @@ class S3AptMethodType(object):
         )
 
 class S3AptRequest(AptRequest):
-    def __init__(self, output):
-        super(S3AptRequest, self).__init__(output)
+    def __new__(cls, output):
+        self = AptRequest.__new__(cls, output)
         self.signature_version = None
+        return self
 
     class S3Uri:
         def __init__(self, request, raw_uri):
             self.request = request
-            self.uri = urlparse.urlparse(raw_uri)
+            self.uri = urllib.parse.urlparse(raw_uri)
             # parse host as if it were an AWS host
             match = re.match('(.+\.|)?s3(?:[-.]([^.]*))?.amazonaws.com', self.uri.hostname)
             self.virtual_host_bucket, self.region = (match.groups() if match else (None, None))
@@ -196,7 +196,7 @@ class S3AptRequest(AptRequest):
             if user:
                 user_parts = user.split(':', 1)
                 if len(user_parts) == 2:
-                    return map(urllib.unquote, user_parts)
+                    return list(map(urllib.parse.unquote, user_parts))
                 else:
                     raise Exception('Access key and secret are specified improperly in the URL')
             return None, None
@@ -205,7 +205,7 @@ class S3AptRequest(AptRequest):
             if self.virtual_host_bucket:
                 key = self.uri.path[1:]
             else:
-                _, bucket, key = map(urllib.unquote, self.uri.path.split('/', 2))
+                _, bucket, key = list(map(urllib.parse.unquote, self.uri.path.split('/', 2)))
             return bucket, key
 
         def signature_version(self):
