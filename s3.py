@@ -3,12 +3,13 @@ import boto3
 import botocore
 import collections
 import hashlib
+import os
 import queue
 import re
 import signal
 import sys
 import threading
-import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 
 class Interrupt:
     def __init__(self):
@@ -308,6 +309,17 @@ class S3AptRequest(AptRequest):
                 )))
 
 if __name__ == '__main__':
+    # set proxies
+    get_proxy = lambda k: os.environ.get(k) or os.environ.get(k.upper())
+    http_proxy = get_proxy('s3_http_proxy')
+    if http_proxy:
+        os.environ['http_proxy'] = http_proxy
+    https_proxy = get_proxy('s3_https_proxy')
+    if https_proxy:
+        os.environ['https_proxy'] = https_proxy
+    elif http_proxy:
+        os.environ['https_proxy'] = http_proxy
+
     # interrupt signals are sometimes sent
     def signal_handler(signal, frame):
         pass
